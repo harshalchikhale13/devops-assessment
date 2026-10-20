@@ -1,0 +1,51 @@
+{
+  "Enabled": true,
+  "ViewerCertificate": {
+    "CloudFrontDefaultCertificate": true,
+    "MinimumProtocolVersion": "TLSv1.2_2021"
+  },
+  "IsIPV6Enabled": true,
+  "Restrictions": {
+    "GeoRestriction": {
+      "Quantity": 0,
+      "RestrictionType": "none"
+    }
+  },
+  "Comment": "DevOps assessment private S3 frontend",
+  "DefaultCacheBehavior": {
+    "TargetOriginId": "private-s3-origin",
+    "Compress": true,
+    "AllowedMethods": {
+      "Quantity": 2,
+      "CachedMethods": {
+        "Quantity": 2,
+        "Items": [
+          "GET",
+          "HEAD"
+        ]
+      },
+      "Items": [
+        "GET",
+        "HEAD"
+      ]
+    },
+    "ViewerProtocolPolicy": "redirect-to-https",
+    "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6"
+  },
+  "Origins": {
+    "Quantity": 1,
+    "Items": [
+      {
+        "DomainName": "devops-assessment-frontend-060516714598-935661.s3.ap-south-1.amazonaws.com",
+        "S3OriginConfig": {
+          "OriginAccessIdentity": ""
+        },
+        "OriginAccessControlId": "E3PRI794HEOH75",
+        "Id": "private-s3-origin"
+      }
+    ]
+  },
+  "PriceClass": "PriceClass_200",
+  "DefaultRootObject": "index.html",
+  "CallerReference": "718a264c-78e7-429b-b91b-e7d639206772"
+}

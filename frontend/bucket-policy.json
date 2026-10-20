@@ -1,0 +1,19 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Principal": {
+        "Service": "cloudfront.amazonaws.com"
+      },
+      "Action": "s3:GetObject",
+      "Effect": "Allow",
+      "Sid": "AllowCloudFrontReadOnly",
+      "Condition": {
+        "StringEquals": {
+          "AWS:SourceArn": "arn:aws:cloudfront::060516714598:distribution/EYSVFP0HTZMAB"
+        }
+      },
+      "Resource": "arn:aws:s3:::devops-assessment-frontend-060516714598-935661/*"
+    }
+  ]
+}

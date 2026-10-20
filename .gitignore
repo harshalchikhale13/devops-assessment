@@ -4,3 +4,28 @@ __pycache__/
 *.py[cod]
 .env
 .aws/
+
+# Terraform local state and generated files
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Local AWS resource metadata
+frontend/deployment-info.json
+infra/github-actions/deployment-info.json
+
+# Terraform generated files and local state
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfplan
+**/*.tfvars
+**/*.tfvars.json

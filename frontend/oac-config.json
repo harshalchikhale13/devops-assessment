@@ -1,0 +1,7 @@
+{
+  "Name": "devops-assessment-frontend-oac",
+  "Description": "OAC for private DevOps assessment frontend S3 bucket",
+  "SigningProtocol": "sigv4",
+  "SigningBehavior": "always",
+  "OriginAccessControlOriginType": "s3"
+}
