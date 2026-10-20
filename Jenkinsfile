@@ -1,22 +1,34 @@
+
 pipeline {
     agent any
 
     stages {
         stage('Checkout') {
             steps {
-                echo 'Source code loaded from GitHub'
+                echo 'Source code checked out from GitHub'
+                sh 'ls -la'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh '''
+                    python3 -m venv .venv
+                    .venv/bin/python -m pip install --upgrade pip
+                    .venv/bin/python -m pip install -r requirements.txt
+                '''
             }
         }
 
         stage('Test') {
             steps {
-                echo 'Python tests will run in the configured build environment'
+                sh '.venv/bin/python -m pytest -v'
             }
         }
 
         stage('Docker Build') {
             steps {
-                echo 'Docker build stage'
+                echo 'Docker build will be enabled after Docker access is configured'
             }
         }
     }
