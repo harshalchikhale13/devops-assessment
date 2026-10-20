@@ -43,7 +43,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::060516714598:role/github-actions-devops-assessment
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ap-south-1
 
       - name: Log in to Amazon ECR
         id: ecr
