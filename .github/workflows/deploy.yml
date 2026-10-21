@@ -21,23 +21,19 @@ jobs:
   test:
     name: Run Python Tests
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: requirements.txt
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
       - name: Run tests
         run: python -m pytest -v
 
@@ -45,7 +41,6 @@ jobs:
     name: Build, Push and Deploy to EKS
     needs: test
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -65,31 +60,112 @@ jobs:
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
+          set -euo pipefail
           docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
           docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           echo "IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_ENV"
 
+      - name: Capture original EKS access settings
+        id: original-access
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG=$(aws eks describe-cluster \
+            --name "$EKS_CLUSTER" \
+            --region "$AWS_REGION" \
+            --query 'cluster.resourcesVpcConfig.[endpointPublicAccess,endpointPrivateAccess,publicAccessCidrs]' \
+            --output json)
+          echo "config=$(echo "$CONFIG" | jq -c .)" >> "$GITHUB_OUTPUT"
+
+      - name: Temporarily allow GitHub runner IP
+        id: allowlist
+        shell: bash
+        env:
+          ORIGINAL_CONFIG: ${{ steps.original-access.outputs.config }}
+        run: |
+          set -euo pipefail
+          PUBLIC=$(echo "$ORIGINAL_CONFIG" | jq -r '.[0]')
+          PRIVATE=$(echo "$ORIGINAL_CONFIG" | jq -r '.[1]')
+          CIDRS=$(echo "$ORIGINAL_CONFIG" | jq -c '.[2]')
+
+          if [ "$PUBLIC" != "true" ]; then
+            echo "Public EKS endpoint access is disabled."
+            exit 1
+          fi
+
+          IP=$(curl --fail --silent --show-error https://checkip.amazonaws.com | tr -d '[:space:]')
+          if ! [[ "$IP" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+            echo "Could not determine runner IPv4 address."
+            exit 1
+          fi
+
+          echo "Runner IP: $IP"
+          NEW_CIDRS=$(echo "$CIDRS" | jq -r --arg ip "${IP}/32" '. + [$ip] | unique | join(",")')
+
+          ID=$(aws eks update-cluster-config \
+            --name "$EKS_CLUSTER" \
+            --region "$AWS_REGION" \
+            --resources-vpc-config "endpointPublicAccess=${PUBLIC},endpointPrivateAccess=${PRIVATE},publicAccessCidrs=${NEW_CIDRS}" \
+            --query 'update.id' --output text)
+
+          for i in $(seq 1 60); do
+            STATUS=$(aws eks describe-update --name "$EKS_CLUSTER" --region "$AWS_REGION" --update-id "$ID" --query 'update.status' --output text)
+            [ "$STATUS" = "Successful" ] && exit 0
+            if [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelled" ]; then
+              aws eks describe-update --name "$EKS_CLUSTER" --region "$AWS_REGION" --update-id "$ID"
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for EKS access update."
+          exit 1
+
       - name: Configure kubectl
         run: |
-          aws eks update-kubeconfig \
-            --name "$EKS_CLUSTER" \
-            --region "$AWS_REGION"
+          aws eks update-kubeconfig --name "$EKS_CLUSTER" --region "$AWS_REGION"
 
       - name: Deploy to EKS
         run: |
+          set -euo pipefail
           kubectl set image deployment/"$K8S_DEPLOYMENT" \
-            "$K8S_CONTAINER=$IMAGE_URI" \
-            --namespace default
-
+            "$K8S_CONTAINER=$IMAGE_URI" --namespace default
           kubectl rollout status deployment/"$K8S_DEPLOYMENT" \
-            --namespace default \
-            --timeout=300s
+            --namespace default --timeout=300s
 
       - name: Verify deployment
         run: |
-          kubectl get deployment "$K8S_DEPLOYMENT" \
-            --namespace default
+          set -euo pipefail
+          kubectl get deployment "$K8S_DEPLOYMENT" --namespace default
+          kubectl get pods --namespace default -l app=devops-assessment
 
-          kubectl get pods \
-            --namespace default \
-            -l app=devops-assessment
+      - name: Restore original EKS access settings
+        if: ${{ always() && steps.original-access.outputs.config != '' }}
+        shell: bash
+        env:
+          ORIGINAL_CONFIG: ${{ steps.original-access.outputs.config }}
+        run: |
+          set -euo pipefail
+          PUBLIC=$(echo "$ORIGINAL_CONFIG" | jq -r '.[0]')
+          PRIVATE=$(echo "$ORIGINAL_CONFIG" | jq -r '.[1]')
+          CIDRS=$(echo "$ORIGINAL_CONFIG" | jq -r '.[2] | join(",")')
+
+          ID=$(aws eks update-cluster-config \
+            --name "$EKS_CLUSTER" \
+            --region "$AWS_REGION" \
+            --resources-vpc-config "endpointPublicAccess=${PUBLIC},endpointPrivateAccess=${PRIVATE},publicAccessCidrs=${CIDRS}" \
+            --query 'update.id' --output text)
+
+          for i in $(seq 1 60); do
+            STATUS=$(aws eks describe-update --name "$EKS_CLUSTER" --region "$AWS_REGION" --update-id "$ID" --query 'update.status' --output text)
+            [ "$STATUS" = "Successful" ] && {
+              echo "Original EKS access settings restored."
+              exit 0
+            }
+            if [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelled" ]; then
+              aws eks describe-update --name "$EKS_CLUSTER" --region "$AWS_REGION" --update-id "$ID"
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "ERROR: Timed out restoring EKS access settings."
+          exit 1
