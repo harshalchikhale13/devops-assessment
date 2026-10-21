@@ -135,8 +135,17 @@ jobs:
       - name: Verify deployment
         run: |
           set -euo pipefail
+          echo "=== Deployment Status ==="
           kubectl get deployment "$K8S_DEPLOYMENT" --namespace default
+          echo -e "\n=== Pod Status ==="
           kubectl get pods --namespace default -l app=devops-assessment
+          echo -e "\n=== ReplicaSets ==="
+          kubectl get replicasets --namespace default -l app=devops-assessment
+          echo -e "\n=== Service Status ==="
+          kubectl get service "$K8S_DEPLOYMENT" --namespace default
+          echo -e "\n=== Pod Logs (last 50 lines) ==="
+          POD=$(kubectl get pods --namespace default -l app=devops-assessment -o jsonpath='{.items[0].metadata.name}')
+          kubectl logs "$POD" --namespace default --tail=50
 
       - name: Restore original EKS access settings
         if: ${{ always() && steps.original-access.outputs.config != '' }}
@@ -153,7 +162,12 @@ jobs:
             --name "$EKS_CLUSTER" \
             --region "$AWS_REGION" \
             --resources-vpc-config "endpointPublicAccess=${PUBLIC},endpointPrivateAccess=${PRIVATE},publicAccessCidrs=${CIDRS}" \
-            --query 'update.id' --output text)
+            --query 'update.id' --output text 2>&1 || true)
+
+          if [ -z "$ID" ] || [ "$ID" = "None" ]; then
+            echo "Configuration is already in original state (no-op update)."
+            exit 0
+          fi
 
           for i in $(seq 1 60); do
             STATUS=$(aws eks describe-update --name "$EKS_CLUSTER" --region "$AWS_REGION" --update-id "$ID" --query 'update.status' --output text)
@@ -162,6 +176,7 @@ jobs:
               exit 0
             }
             if [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelled" ]; then
+              echo "ERROR: Failed to restore EKS access settings."
               aws eks describe-update --name "$EKS_CLUSTER" --region "$AWS_REGION" --update-id "$ID"
               exit 1
             fi
