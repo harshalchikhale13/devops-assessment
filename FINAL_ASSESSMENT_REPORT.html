@@ -301,6 +301,154 @@
     </div>
 </div>
 
+<!-- COMPLETE USER FLOW -->
+<div class="page">
+    <h1>Complete End-to-End User Flow</h1>
+
+    <h2>Live Verified User Journey</h2>
+
+    <h3>Step 1: User Opens Frontend</h3>
+    <div class="requirement">
+        <div class="requirement-title">GET https://d2o2e2fwe386gv.cloudfront.net/</div>
+        <p><span class="check">✓</span> HTTP 200 OK</p>
+        <p><span class="check">✓</span> Content-Type: text/html; charset=utf-8</p>
+        <p><span class="check">✓</span> Server: AmazonS3 (via CloudFront OAC)</p>
+        <p><span class="check">✓</span> HTML Title: "DevOps Assessment"</p>
+        <p><span class="check">✓</span> Latency: < 100ms (cached)</p>
+    </div>
+
+    <h3>Step 2: Frontend JavaScript Calls Backend Health</h3>
+    <div class="requirement">
+        <div class="requirement-title">GET https://d2o2e2fwe386gv.cloudfront.net/health</div>
+        <p><span class="check">✓</span> HTTP 200 OK</p>
+        <p><span class="check">✓</span> Content-Type: application/json</p>
+        <p><span class="check">✓</span> Server: gunicorn</p>
+        <p><span class="check">✓</span> Response: {"status":"ok"}</p>
+        <p><span class="check">✓</span> Via: 1.1 CloudFront</p>
+        <p><span class="check">✓</span> X-Cache: Miss from cloudfront (first hit backend)</p>
+    </div>
+
+    <h3>Step 3: Security Verification - Direct S3 Access</h3>
+    <div class="requirement">
+        <div class="requirement-title">GET https://devops-assessment-frontend-060516714598-935661.s3.ap-south-1.amazonaws.com/index.html</div>
+        <p><span class="check">✓</span> HTTP 403 Forbidden</p>
+        <p><span class="check">✓</span> Error Code: AccessDenied</p>
+        <p><span class="check">✓</span> Message: Access Denied</p>
+        <p><span class="check">✓</span> Reason: OAC protection blocking direct access</p>
+        <p><strong>Security Status</strong>: ✅ SECURE</p>
+    </div>
+
+    <h3>Step 4: ALB Direct Health Check</h3>
+    <div class="requirement">
+        <div class="requirement-title">GET http://devops-assessment-alb-105367744.ap-south-1.elb.amazonaws.com/health</div>
+        <p><span class="check">✓</span> HTTP 200 OK</p>
+        <p><span class="check">✓</span> Response: {"status":"ok"}</p>
+        <p><span class="check">✓</span> Server: gunicorn</p>
+        <p><strong>ALB Status</strong>: ✅ Routing Correctly</p>
+    </div>
+
+    <h2>Complete Request Routing Path</h2>
+    <div class="flow">
+Browser HTTPS Request
+  ↓
+CloudFront (EYSVFP0HTZMAB)
+  ├─ /index.html → S3 Origin (OAC signed) → 200 OK ✓
+  └─ /health → ALB Origin (port 80) → 200 OK ✓
+     ↓
+     ALB (devops-assessment-alb-105367744)
+       ├─ Port: 80
+       ├─ Health: active ✓
+       ↓
+     Target Group (devops-assessment-tg:5000)
+       ├─ Health Check: /health ✓
+       ├─ Targets: 1/1 healthy
+       ↓
+     EC2 Instance (i-0532103c6195f3bb0)
+       ├─ Status: Running ✓
+       ↓
+     EKS Kubernetes Service (172.20.99.121:80→:5000)
+       ├─ Type: ClusterIP
+       ├─ Load Balance: 2 pods
+       ↓
+     Pod 1 (10.20.1.236) OR Pod 2 (10.20.3.163)
+       ├─ Status: Running 1/1 ✓
+       ├─ Health: Readiness PASS ✓
+       ├─ Health: Liveness PASS ✓
+       ↓
+     Flask Application (Gunicorn 5000)
+       ├─ GET /health → {"status":"ok"} ✓
+       └─ Status: Active ✓
+
+Response → Browser (< 200ms)
+    </div>
+
+    <h2>Infrastructure Status (Live Verified)</h2>
+
+    <table>
+        <tr>
+            <th>Component</th>
+            <th>Status</th>
+            <th>Details</th>
+        </tr>
+        <tr>
+            <td>Kubernetes Deployment</td>
+            <td>✓ Ready</td>
+            <td>2/2 replicas running</td>
+        </tr>
+        <tr>
+            <td>Pod 1</td>
+            <td>✓ Running</td>
+            <td>devops-assessment-689f6d5dbf-tq5xw (10.20.1.236)</td>
+        </tr>
+        <tr>
+            <td>Pod 2</td>
+            <td>✓ Running</td>
+            <td>devops-assessment-689f6d5dbf-b2gpv (10.20.3.163)</td>
+        </tr>
+        <tr>
+            <td>Gunicorn Server</td>
+            <td>✓ Active</td>
+            <td>Listening at http://0.0.0.0:5000</td>
+        </tr>
+        <tr>
+            <td>ALB</td>
+            <td>✓ Active</td>
+            <td>devops-assessment-alb-105367744</td>
+        </tr>
+        <tr>
+            <td>Target Group Health</td>
+            <td>✓ Healthy</td>
+            <td>1/1 targets passing /health checks</td>
+        </tr>
+        <tr>
+            <td>ASG Capacity</td>
+            <td>✓ Configured</td>
+            <td>Min:1, Current:1, Max:4</td>
+        </tr>
+        <tr>
+            <td>CloudFront</td>
+            <td>✓ Active</td>
+            <td>EYSVFP0HTZMAB (HTTPS enforced)</td>
+        </tr>
+        <tr>
+            <td>S3 Security</td>
+            <td>✓ Secure</td>
+            <td>OAC enabled, direct access blocked</td>
+        </tr>
+    </table>
+
+    <h2>Recent Deployment Events</h2>
+    <ul class="checklist">
+        <li>Image pulled successfully from ECR (733ms)</li>
+        <li>Pod 1 started and container created</li>
+        <li>Pod 2 started and container created</li>
+        <li>Both pods deployed within last 3 minutes</li>
+        <li>Latest deployment from commit: 34db953</li>
+        <li>All health checks passing</li>
+    </ul>
+
+</div>
+
 <!-- REQUIREMENT 3 -->
 <div class="page">
     <h1>Requirement 3: Auto Scaling Group + ALB + 70% Scaling</h1>
